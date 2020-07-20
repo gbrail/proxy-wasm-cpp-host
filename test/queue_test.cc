@@ -12,14 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <functional>
 #include <memory>
 
+#include "include/proxy-wasm/compat.h"
 #include "include/proxy-wasm/context.h"
 #include "include/proxy-wasm/null.h"
 #include "include/proxy-wasm/wasm.h"
+#include "test/mocks.h"
 
 #include "gtest/gtest.h"
 
+using proxy_wasm::CallOnThreadFunction;
 using proxy_wasm::ContextBase;
 using proxy_wasm::SharedQueueDequeueToken;
 using proxy_wasm::SharedQueueEnqueueToken;
@@ -30,20 +34,34 @@ using proxy_wasm::WasmVm;
 namespace {
 
 class TestContext : public ContextBase {
- public:
-  TestContext(WasmBase* base) : ContextBase(base) {}
+public:
+  TestContext(WasmBase *base) : ContextBase(base) {}
   void onQueueReady(SharedQueueDequeueToken token) override {
+    ready_token_ = token;
   }
+
+  void resetReadyToken() {
+    ready_token_ = UINT_MAX;
+  }
+
+  SharedQueueDequeueToken readyToken() const {
+    return ready_token_;
+  }
+
+ private:
+  SharedQueueDequeueToken ready_token_ = UINT_MAX;
 };
 
 class QueueTest : public ::testing::Test {
- protected:
+protected:
   void SetUp() {
-    base_.reset(new WasmBase(proxy_wasm::createNullVm(), "TestVm", "", "TestVmKey"));
-    ctx_.reset(new TestContext(base_.get()));
+    auto base = proxy_wasm::createWasm("KeyKeyKey", "", nullptr, 
+      proxy_wasm::test::createMockHandle,
+      proxy_wasm::test::cloneMockHandle, true);
+    ASSERT_TRUE(base);
+    ctx_.reset(new TestContext(base->wasm().get()));
   }
 
-  std::unique_ptr<WasmBase> base_;
   std::unique_ptr<TestContext> ctx_;
 };
 
@@ -74,13 +92,20 @@ TEST_F(QueueTest, EnqDeq) {
   std::string data;
   status = ctx_->dequeueSharedQueue(deq_token, &data);
   EXPECT_EQ(status, WasmResult::Empty);
+  EXPECT_EQ(ctx_->readyToken(), UINT_MAX);
 
   status = ctx_->enqueueSharedQueue(enq_token, "This is a test");
   ASSERT_EQ(status, WasmResult::Ok);
   status = ctx_->dequeueSharedQueue(deq_token, &data);
   ASSERT_EQ(status, WasmResult::Ok);
   EXPECT_EQ(data, "This is a test");
+  EXPECT_EQ(ctx_->readyToken(), deq_token);
+
+  // It should be empty again
+  ctx_->resetReadyToken();
+  status = ctx_->dequeueSharedQueue(deq_token, &data);
+  EXPECT_EQ(status, WasmResult::Empty);
+  EXPECT_EQ(ctx_->readyToken(), UINT_MAX);
 }
 
-}
-
+} // namespace

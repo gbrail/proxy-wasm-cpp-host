@@ -274,7 +274,7 @@ protected:
 
 std::string makeVmKey(string_view vm_id, string_view configuration, string_view code);
 
-using WasmHandleFactory = std::function<std::shared_ptr<WasmHandleBase>(string_view vm_id)>;
+using WasmHandleFactory = std::function<std::shared_ptr<WasmHandleBase>(string_view vm_key)>;
 using WasmHandleCloneFactory =
     std::function<std::shared_ptr<WasmHandleBase>(std::shared_ptr<WasmHandleBase> wasm)>;
 
